@@ -64,6 +64,7 @@ describe('worker/runner/test-runner', () => {
         sandbox.stub(HookRunner.prototype, 'runAfterEachHooks').resolves();
 
         sandbox.stub(OneTimeScreenshooter, 'create').returns(Object.create(OneTimeScreenshooter.prototype));
+        sandbox.stub(OneTimeScreenshooter.prototype, 'extendWithPageScreenshot').resolves();
     });
 
     afterEach(() => sandbox.restore());
@@ -86,18 +87,6 @@ describe('worker/runner/test-runner', () => {
             await runner.run(opts);
 
             assert.calledOnceWithExactly(BrowserAgent.prototype.getBrowser, opts);
-        });
-
-        it('should create one time screenshooter', async () => {
-            const config = makeConfigStub();
-            const runner = mkRunner_({config});
-
-            const browser = mkBrowser_();
-            BrowserAgent.prototype.getBrowser.resolves(browser);
-
-            await run_({runner});
-
-            assert.calledOnceWith(OneTimeScreenshooter.create, config, browser);
         });
 
         it('should create execution thread for test', async () => {
@@ -178,15 +167,6 @@ describe('worker/runner/test-runner', () => {
             assert.propertyVal(test.parent, 'foo', 'bar');
         });
 
-        it('should create execution thread with screenshooter', async () => {
-            const screenshooter = Object.create(OneTimeScreenshooter.prototype);
-            OneTimeScreenshooter.create.returns(screenshooter);
-
-            await run_();
-
-            assert.calledOnceWith(ExecutionThread.create, sinon.match({screenshooter}));
-        });
-
         it('should create hook runner for test with execution thread', async () => {
             const executionThread = Object.create(ExecutionThread.prototype);
             ExecutionThread.create.returns(executionThread);
@@ -261,7 +241,7 @@ describe('worker/runner/test-runner', () => {
                 it('should throw error if "body" does not exist on the page', async () => {
                     browser.publicAPI.$.withArgs('body').resolves(undefined);
 
-                    assert.isRejected(run_(), /There is no "body" element on the page when resetting cursor position/);
+                    await assert.isRejected(run_(), /There is no "body" element on the page when resetting cursor position/);
                 });
 
                 it('should get body element', async () => {
@@ -613,6 +593,18 @@ describe('worker/runner/test-runner', () => {
                 });
 
                 await assert.isRejected(run_(), 'runtime error');
+            });
+
+            it('should extend error with page screenshot', async () => {
+                ExecutionThread.prototype.run.rejects(new Error());
+
+                OneTimeScreenshooter.prototype.extendWithPageScreenshot.callsFake((error) => {
+                    error.screenshot = {base64: 'image', size: {x: 1, y: 2}};
+                });
+
+                const error = await run_().catch((e) => e);
+
+                assert.match(error.screenshot, {base64: 'image', size: {x: 1, y: 2}});
             });
 
             it('should extend error with browser meta', async () => {

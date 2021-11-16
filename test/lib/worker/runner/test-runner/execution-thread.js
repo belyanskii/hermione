@@ -1,6 +1,5 @@
 'use strict';
 
-const _ = require('lodash');
 const Promise = require('bluebird');
 const ExecutionThread = require('lib/worker/runner/test-runner/execution-thread');
 const OneTimeScreenshooter = require('lib/worker/runner/test-runner/one-time-screenshooter');
@@ -188,53 +187,6 @@ describe('worker/runner/test-runner/execution-thread', () => {
             const executionThread = mkExecutionThread_();
 
             await assert.isFulfilled(executionThread.run(runnable));
-        });
-
-        describe('screenshotOnReject', () => {
-            it('should extend error with page screenshot', async () => {
-                const error = new Error();
-                const runnable = mkRunnable_({
-                    fn: () => Promise.reject(error)
-                });
-
-                OneTimeScreenshooter.prototype.extendWithPageScreenshot
-                    .withArgs(error).callsFake((e) => {
-                        return Promise.resolve(_.extend(e, {screenshot: 'base64img'}));
-                    });
-
-                const err = await mkExecutionThread_().run(runnable)
-                    .catch((e) => e);
-
-                assert.propertyVal(err, 'screenshot', 'base64img');
-            });
-
-            it('should wait until screenshot will be taken', async () => {
-                const afterScreenshot = sinon.spy().named('afterScreenshot');
-                OneTimeScreenshooter.prototype.extendWithPageScreenshot
-                    .callsFake(() => Promise.delay(10).then(afterScreenshot));
-
-                const runnable = mkRunnable_({
-                    fn: () => Promise.reject(new Error())
-                });
-
-                await mkExecutionThread_().run(runnable).catch(() => {});
-
-                assert.calledOnce(afterScreenshot);
-            });
-
-            it('runnable should not fail with timeout while taking screenshot', async () => {
-                const runnable = mkRunnable_({
-                    fn: () => Promise.reject(new Error('foo'))
-                });
-                runnable.timeout(10);
-
-                OneTimeScreenshooter.prototype.extendWithPageScreenshot
-                    .callsFake(() => Promise.delay(20));
-
-                const executionThread = mkExecutionThread_();
-
-                await assert.isRejected(executionThread.run(runnable), /foo/);
-            });
         });
     });
 });
